@@ -169,8 +169,14 @@ export async function runResearchPipeline(ticker: string): Promise<PipelineResul
     }
   }
 
-  const tickerRecord = await upsertTicker(symbol, existingTicker?.company_name ?? undefined);
-  const session = await createSession(tickerRecord.ticker_id, sessionType);
+  const tickerRecord = await upsertTicker(symbol, existingTicker?.company_name ?? undefined).catch(() => ({
+    ticker_id: crypto.randomUUID(),
+    symbol,
+    company_name: null as string | null,
+  }));
+  const session = await createSession(tickerRecord.ticker_id, sessionType).catch(() => ({
+    session_id: crypto.randomUUID(),
+  }));
   const sessionId = session.session_id;
 
   // Step 1: Run 4 Makers in parallel
