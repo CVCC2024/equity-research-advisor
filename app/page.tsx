@@ -1,69 +1,82 @@
-import Image from "next/image";
+import { getRecentTickers } from '@/lib/db/queries';
+import SearchBar from '@/components/SearchBar';
 
-export default function Home() {
+export const revalidate = 60;
+
+interface RecentTicker {
+  ticker_id: string;
+  symbol: string;
+  company_name: string | null;
+  last_researched_at: string | null;
+  research_sessions?: Array<{ confidence_composite: number | null }>;
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function confidenceLabel(score: number | null): { label: string; cls: string } {
+  if (score === null) return { label: '—', cls: 'text-slate-500' };
+  if (score >= 0.85) return { label: `${(score * 100).toFixed(0)}% HIGH`, cls: 'text-emerald-400' };
+  if (score >= 0.65) return { label: `${(score * 100).toFixed(0)}% MOD`, cls: 'text-blue-400' };
+  return { label: `${(score * 100).toFixed(0)}% LOW`, cls: 'text-amber-400' };
+}
+
+export default async function HomePage() {
+  let recentTickers: RecentTicker[] = [];
+  try {
+    recentTickers = (await getRecentTickers(10)) as RecentTicker[];
+  } catch {
+    // Supabase not yet configured — show empty state
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="max-w-3xl mx-auto px-6 py-20">
+      <div className="text-center mb-12">
+        <h1 className="text-3xl font-bold text-white mb-2">Equity Research Advisor</h1>
+        <p className="text-slate-400 text-sm">
+          Multi-agent AI research platform. Enter a US ticker to initiate a full research session.
+        </p>
+      </div>
+
+      <SearchBar />
+
+      {recentTickers.length > 0 && (
+        <div className="mt-12">
+          <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+            Recent Research
+          </h2>
+          <div className="divide-y divide-slate-800 border border-slate-800 rounded-lg overflow-hidden">
+            {recentTickers.map((t) => {
+              const latestSession = t.research_sessions?.[0];
+              const conf = confidenceLabel(latestSession?.confidence_composite ?? null);
+              return (
+                <a
+                  key={t.ticker_id}
+                  href={`/ticker/${t.symbol}`}
+                  className="flex items-center justify-between px-4 py-3 bg-slate-900/50 hover:bg-slate-800/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono font-bold text-white text-sm w-14">{t.symbol}</span>
+                    <span className="text-slate-400 text-sm">{t.company_name ?? '—'}</span>
+                  </div>
+                  <div className="flex items-center gap-6 text-xs">
+                    <span className={`font-mono ${conf.cls}`}>{conf.label}</span>
+                    <span className="text-slate-600">{formatDate(t.last_researched_at)}</span>
+                  </div>
+                </a>
+              );
+            })}
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      )}
     </div>
   );
 }
