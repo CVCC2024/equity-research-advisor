@@ -128,7 +128,14 @@ async function runMakerRetry(params: {
   }
 }
 
-export async function runResearchPipeline(ticker: string): Promise<PipelineResult> {
+export type PipelineProgressEvent =
+  | { step: 'agent_done'; agent: string; status: 'ok' | 'error' }
+  | { step: 'phase'; label: string };
+
+export async function runResearchPipeline(
+  ticker: string,
+  onProgress?: (event: PipelineProgressEvent) => void
+): Promise<PipelineResult> {
   const symbol = ticker.toUpperCase();
   const start = Date.now();
   const usage: TokenUsage = { inputTokens: 0, outputTokens: 0 };

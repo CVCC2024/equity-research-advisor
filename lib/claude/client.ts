@@ -1,15 +1,12 @@
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+// Google Gemini via OpenAI-compatible endpoint — free tier: 1M tokens/min, 1500 req/day
+const gemini = new OpenAI({
+  apiKey: process.env.GEMINI_API_KEY ?? '',
+  baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
 });
 
-const MODEL = 'claude-sonnet-4-6';
-
-const WEB_SEARCH_TOOL: Anthropic.Tool = {
-  type: 'web_search_20250305' as Anthropic.Tool['type'],
-  name: 'web_search',
-} as Anthropic.Tool;
+const MODEL = 'gemini-3.6-flash';
 
 export interface ClaudeCallOptions {
   systemPrompt: string;
@@ -52,36 +49,34 @@ export async function callClaude(options: ClaudeCallOptions): Promise<ClaudeCall
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-      const response = await anthropic.messages.create(
+      const response = await gemini.chat.completions.create(
         {
           model: MODEL,
           max_tokens: maxTokens,
-          system: systemPrompt,
-          tools: [WEB_SEARCH_TOOL],
-          messages: [{ role: 'user', content: userMessage }],
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage },
+          ],
         },
         { signal: controller.signal }
       );
 
       clearTimeout(timeoutId);
 
-      const textContent = response.content
-        .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-        .map((block) => block.text)
-        .join('');
+      const content = response.choices[0]?.message?.content ?? '';
 
       return {
-        content: textContent,
-        inputTokens: response.usage.input_tokens,
-        outputTokens: response.usage.output_tokens,
+        content,
+        inputTokens: response.usage?.prompt_tokens ?? 0,
+        outputTokens: response.usage?.completion_tokens ?? 0,
         durationMs: Date.now() - start,
       };
     } catch (err) {
       lastError = err as Error;
 
       const isRateLimit =
-        err instanceof Anthropic.RateLimitError ||
-        (err instanceof Error && err.message.includes('429'));
+        err instanceof Error &&
+        (err.message.includes('429') || err.message.includes('rate_limit') || err.message.includes('quota'));
 
       if (!isRateLimit || attempt === 2) {
         throw err;
@@ -89,7 +84,7 @@ export async function callClaude(options: ClaudeCallOptions): Promise<ClaudeCall
     }
   }
 
-  throw lastError ?? new Error('Claude API call failed after retries');
+  throw lastError ?? new Error('Gemini API call failed after retries');
 }
 
 export async function callClaudeForJson<T>(options: ClaudeCallOptions): Promise<{

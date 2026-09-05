@@ -3,7 +3,8 @@
 import { useEffect, useState, use } from 'react';
 import SynthesisReport from '@/components/SynthesisReport';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
-import ConfidenceBadge from '@/components/ConfidenceBadge';
+import SignalCard from '@/components/SignalCard';
+import { parseReport, type ParsedReport } from '@/lib/utils/parseReport';
 
 interface ResearchResponse {
   sessionId: string;
@@ -14,35 +15,18 @@ interface ResearchResponse {
   error?: string;
 }
 
-interface AgentTabData {
-  fundamentals?: unknown;
-  macro?: unknown;
-  industry?: unknown;
-  regulatory?: unknown;
-  correlation?: unknown;
-  checker?: unknown;
-}
+const DIRECTION_STYLES: Record<string, string> = {
+  BULLISH:  'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40',
+  BEARISH:  'bg-red-500/20 text-red-400 border border-red-500/40',
+  WATCH:    'bg-amber-500/20 text-amber-400 border border-amber-500/40',
+  NEUTRAL:  'bg-slate-700/40 text-slate-300 border border-slate-600',
+};
 
-type TabId = 'report' | 'fundamentals' | 'macro' | 'industry' | 'regulatory' | 'correlation' | 'validation' | 'sources';
-
-const TABS: { id: TabId; label: string }[] = [
-  { id: 'report', label: 'Research Brief' },
-  { id: 'fundamentals', label: 'Fundamentals' },
-  { id: 'macro', label: 'Macro' },
-  { id: 'industry', label: 'Industry' },
-  { id: 'regulatory', label: 'Regulatory' },
-  { id: 'correlation', label: 'Correlations' },
-  { id: 'validation', label: 'Validation' },
-  { id: 'sources', label: 'Sources' },
-];
-
-function JsonViewer({ data }: { data: unknown }) {
-  return (
-    <pre className="text-xs text-slate-300 font-mono overflow-auto bg-slate-900/50 rounded p-4 border border-slate-800 max-h-[70vh]">
-      {JSON.stringify(data, null, 2)}
-    </pre>
-  );
-}
+const CONF_BAR_COLOR: Record<string, string> = {
+  HIGH:     'bg-emerald-500',
+  MODERATE: 'bg-amber-500',
+  LOW:      'bg-red-500',
+};
 
 export default function TickerPage({ params }: { params: Promise<{ symbol: string }> }) {
   const { symbol } = use(params);
@@ -51,8 +35,8 @@ export default function TickerPage({ params }: { params: Promise<{ symbol: strin
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ResearchResponse | null>(null);
-  const [agentData, setAgentData] = useState<AgentTabData>({});
-  const [activeTab, setActiveTab] = useState<TabId>('report');
+  const [parsed, setParsed] = useState<ParsedReport | null>(null);
+  const [showFullReport, setShowFullReport] = useState(false);
 
   useEffect(() => {
     async function runResearch() {
@@ -64,175 +48,132 @@ export default function TickerPage({ params }: { params: Promise<{ symbol: strin
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ticker }),
         });
-
         if (!res.ok) {
           const body = await res.json();
           throw new Error(body.error ?? `HTTP ${res.status}`);
         }
-
         const data: ResearchResponse = await res.json();
         setResult(data);
-
-        // Fetch session details for agent tabs
-        if (data.sessionId) {
-          const sessionRes = await fetch(`/api/research/${data.sessionId}`);
-          if (sessionRes.ok) {
-            const session = await sessionRes.json();
-            setAgentData({
-              fundamentals: session.maker_fundamentals_output,
-              macro: session.maker_macro_output,
-              industry: session.maker_industry_output,
-              regulatory: session.maker_regulatory_output,
-              correlation: session.correlation_output,
-              checker: session.checker_output,
-            });
-          }
-        }
+        setParsed(parseReport(data.synthesisMarkdown));
       } catch (err) {
         setError(String(err));
       } finally {
         setLoading(false);
       }
     }
-
     runResearch();
   }, [ticker]);
 
-  const getSourcesFromChecker = () => {
-    if (!agentData.checker) return { tier1: [], tier2: [], tier3: [], tier4: [] };
-    const assignments = (agentData.checker as { source_tier_assignments?: Array<{ assigned_tier: number; source_name: string; source_url: string; tier_label: string }> })
-      ?.source_tier_assignments ?? [];
-    return {
-      tier1: assignments.filter((s) => s.assigned_tier === 1),
-      tier2: assignments.filter((s) => s.assigned_tier === 2),
-      tier3: assignments.filter((s) => s.assigned_tier === 3),
-      tier4: assignments.filter((s) => s.assigned_tier >= 4),
-    };
-  };
+  const topCatalysts = parsed?.catalysts.slice(0, 3) ?? [];
+  const topRisks = parsed?.risks.slice(0, 3) ?? [];
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-8">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-white font-mono">{ticker}</h1>
-            {loading && (
-              <span className="text-xs text-slate-400 animate-pulse">Researching...</span>
-            )}
-            {result && !loading && (
-              <ConfidenceBadge score={0.75} />
-            )}
+    <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
+
+      {/* Back */}
+      <a href="/" className="text-xs text-slate-500 hover:text-slate-300 transition-colors">← Back to watchlist</a>
+
+      {/* Loading */}
+      {loading && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-bold text-white font-mono">{ticker}</span>
           </div>
-          {result?.breakingClaimsCount ? (
-            <p className="text-xs text-amber-400 mt-1">
-              {result.breakingClaimsCount} breaking claim(s) flagged for verification
-            </p>
-          ) : null}
+          <LoadingSkeleton />
         </div>
-        <a href="/" className="text-sm text-slate-400 hover:text-slate-200 transition-colors">
-          ← Back
-        </a>
-      </div>
+      )}
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 border-b border-slate-800 overflow-x-auto">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-3 py-2 text-xs font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${
-              activeTab === tab.id
-                ? 'border-blue-500 text-blue-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Content */}
-      {loading && <LoadingSkeleton />}
-
+      {/* Error */}
       {error && (
         <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-4 text-red-400 text-sm">
           <strong>Error:</strong> {error}
         </div>
       )}
 
-      {!loading && !error && result && (
-        <>
-          {activeTab === 'report' && (
-            <SynthesisReport markdown={result.synthesisMarkdown} />
-          )}
-          {activeTab === 'fundamentals' && (
-            agentData.fundamentals
-              ? <JsonViewer data={agentData.fundamentals} />
-              : <p className="text-slate-500 text-sm">No fundamentals data available.</p>
-          )}
-          {activeTab === 'macro' && (
-            agentData.macro
-              ? <JsonViewer data={agentData.macro} />
-              : <p className="text-slate-500 text-sm">No macro data available.</p>
-          )}
-          {activeTab === 'industry' && (
-            agentData.industry
-              ? <JsonViewer data={agentData.industry} />
-              : <p className="text-slate-500 text-sm">No industry data available.</p>
-          )}
-          {activeTab === 'regulatory' && (
-            agentData.regulatory
-              ? <JsonViewer data={agentData.regulatory} />
-              : <p className="text-slate-500 text-sm">No regulatory data available.</p>
-          )}
-          {activeTab === 'correlation' && (
-            agentData.correlation
-              ? <JsonViewer data={agentData.correlation} />
-              : <p className="text-slate-500 text-sm">No correlation data available.</p>
-          )}
-          {activeTab === 'validation' && (
-            agentData.checker
-              ? <JsonViewer data={agentData.checker} />
-              : <p className="text-slate-500 text-sm">No validation data available.</p>
-          )}
-          {activeTab === 'sources' && (() => {
-            const sources = getSourcesFromChecker();
-            const tierLabels = ['Tier 1 (Audited/Regulatory)', 'Tier 2 (Institutional)', 'Tier 3 (Professional)', 'Tier 4 (Social/Crowdsourced)'];
-            const tiers = [sources.tier1, sources.tier2, sources.tier3, sources.tier4];
-            return (
-              <div className="space-y-6">
-                {tiers.map((tier, idx) => (
-                  tier.length > 0 && (
-                    <div key={idx}>
-                      <h3 className="text-sm font-semibold text-slate-300 mb-2">{tierLabels[idx]}</h3>
-                      <div className="space-y-1">
-                        {tier.map((s, i) => (
-                          <div key={i} className="flex items-start gap-3 text-xs py-1.5 border-b border-slate-800/50">
-                            <span className="text-slate-300 font-medium min-w-0 flex-1">{s.source_name}</span>
-                            {s.source_url && (
-                              <a
-                                href={s.source_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-400 hover:text-blue-300 shrink-0"
-                              >
-                                ↗
-                              </a>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )
-                ))}
-                {Object.values(sources).every((t) => t.length === 0) && (
-                  <p className="text-slate-500 text-sm">No source data available.</p>
-                )}
+      {/* Results */}
+      {!loading && !error && result && parsed && (
+        <div className="space-y-6">
+
+          {/* ── TOP STRIP ── */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 pb-4 border-b border-slate-800">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <h1 className="text-3xl font-bold text-white font-mono">{ticker}</h1>
+              <span className={`text-xs font-bold tracking-widest px-3 py-1 rounded-full ${DIRECTION_STYLES[parsed.direction] ?? DIRECTION_STYLES.NEUTRAL}`}>
+                {parsed.directionLabel}
+              </span>
+              {result.breakingClaimsCount > 0 && (
+                <span className="text-xs text-amber-400 border border-amber-500/30 bg-amber-950/30 px-2 py-0.5 rounded">
+                  ⚡ {result.breakingClaimsCount} breaking
+                </span>
+              )}
+            </div>
+
+            {/* Confidence meter */}
+            <div className="flex items-center gap-3 shrink-0">
+              <div className="text-right">
+                <p className="text-xs text-slate-500 uppercase tracking-wider">Confidence</p>
+                <p className="text-lg font-bold text-white">{Math.round(parsed.confidence * 100)}%</p>
               </div>
-            );
-          })()}
-        </>
+              <div className="w-2 h-12 bg-slate-800 rounded-full overflow-hidden flex flex-col justify-end">
+                <div
+                  className={`w-full rounded-full transition-all ${CONF_BAR_COLOR[parsed.confidenceLabel] ?? 'bg-slate-500'}`}
+                  style={{ height: `${parsed.confidence * 100}%` }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* ── THESIS ── */}
+          {parsed.thesis && (
+            <p className="text-slate-300 text-sm leading-relaxed border-l-2 border-slate-600 pl-4 italic">
+              {parsed.thesis}
+            </p>
+          )}
+
+          {/* ── SIGNAL CALLOUTS ── */}
+          {(topCatalysts.length > 0 || topRisks.length > 0) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Catalysts */}
+              <div className="space-y-3">
+                <h2 className="text-xs font-bold tracking-widest text-emerald-400 uppercase">
+                  ▲ Bullish Signals
+                </h2>
+                {topCatalysts.length > 0
+                  ? topCatalysts.map((s, i) => <SignalCard key={i} signal={s} />)
+                  : <p className="text-slate-600 text-xs">No strong catalysts identified.</p>
+                }
+              </div>
+
+              {/* Risks */}
+              <div className="space-y-3">
+                <h2 className="text-xs font-bold tracking-widest text-red-400 uppercase">
+                  ▼ Risk Signals
+                </h2>
+                {topRisks.length > 0
+                  ? topRisks.map((s, i) => <SignalCard key={i} signal={s} />)
+                  : <p className="text-slate-600 text-xs">No critical risks flagged.</p>
+                }
+              </div>
+            </div>
+          )}
+
+          {/* ── FULL REPORT TOGGLE ── */}
+          <div className="border-t border-slate-800 pt-4">
+            <button
+              onClick={() => setShowFullReport(v => !v)}
+              className="text-xs text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-2"
+            >
+              <span className={`transition-transform ${showFullReport ? 'rotate-90' : ''}`}>▶</span>
+              {showFullReport ? 'Hide' : 'Show'} full research brief
+            </button>
+            {showFullReport && (
+              <div className="mt-4">
+                <SynthesisReport markdown={result.synthesisMarkdown} />
+              </div>
+            )}
+          </div>
+
+        </div>
       )}
     </div>
   );
