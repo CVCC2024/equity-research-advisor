@@ -132,28 +132,26 @@ export default function TickerPage({ params }: { params: Promise<{ symbol: strin
 
           {/* ── SIGNAL CALLOUTS ── */}
           {(topCatalysts.length > 0 || topRisks.length > 0) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Catalysts */}
-              <div className="space-y-3">
-                <h2 className="text-xs font-bold tracking-widest text-emerald-400 uppercase">
-                  ▲ Bullish Signals
-                </h2>
-                {topCatalysts.length > 0
-                  ? topCatalysts.map((s, i) => <SignalCard key={i} signal={s} />)
-                  : <p className="text-slate-600 text-xs">No strong catalysts identified.</p>
-                }
-              </div>
+            <div className="space-y-3">
+              {/* Bullish signals */}
+              {topCatalysts.length > 0 && (
+                <>
+                  <h2 className="text-xs font-bold tracking-widest text-emerald-400 uppercase">
+                    ▲ Bullish Signals
+                  </h2>
+                  {topCatalysts.map((s, i) => <SignalCard key={i} signal={s} />)}
+                </>
+              )}
 
-              {/* Risks */}
-              <div className="space-y-3">
-                <h2 className="text-xs font-bold tracking-widest text-red-400 uppercase">
-                  ▼ Risk Signals
-                </h2>
-                {topRisks.length > 0
-                  ? topRisks.map((s, i) => <SignalCard key={i} signal={s} />)
-                  : <p className="text-slate-600 text-xs">No critical risks flagged.</p>
-                }
-              </div>
+              {/* Risk signals */}
+              {topRisks.length > 0 && (
+                <>
+                  <h2 className={`text-xs font-bold tracking-widest text-red-400 uppercase ${topCatalysts.length > 0 ? 'mt-2' : ''}`}>
+                    ▼ Risk Signals
+                  </h2>
+                  {topRisks.map((s, i) => <SignalCard key={i} signal={s} />)}
+                </>
+              )}
             </div>
           )}
 

@@ -37,7 +37,7 @@ function parseSignalItems(section: string, type: 'catalyst' | 'risk'): ParsedSig
       confidence,
       confidenceLabel,
       classification: match[4].trim(),
-      description: match[5].replace(/\s+/g, ' ').trim().slice(0, 200),
+      description: match[5].replace(/\s+/g, ' ').trim(),
       type,
       tier: signalTier(confidence, type),
     });

@@ -12,7 +12,7 @@ async function getSystemPrompt(): Promise<string> {
   return cachedPrompt;
 }
 
-export async function runFundamentalsMaker(ticker: string, companyName?: string): Promise<{
+export async function runFundamentalsMaker(ticker: string, companyName?: string, liveContext?: string): Promise<{
   output: MakerFundamentalsOutput;
   inputTokens: number;
   outputTokens: number;
@@ -21,10 +21,11 @@ export async function runFundamentalsMaker(ticker: string, companyName?: string)
   const systemPrompt = await getSystemPrompt();
   const today = new Date().toISOString().split('T')[0];
   const company = companyName ? ` (${companyName})` : '';
+  const context = liveContext ? `\n\n${liveContext}` : '';
 
   const result = await callClaudeForJson<MakerFundamentalsOutput>({
     systemPrompt,
-    userMessage: `Research ${ticker}${company}. Today's date is ${today}.`,
+    userMessage: `Research ${ticker}${company}. Today's date is ${today}.${context}`,
     maxTokens: 8000,
     timeoutMs: 300_000,
   });

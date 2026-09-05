@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import type { ParsedSignal } from '@/lib/utils/parseReport';
 
 const TIER_STYLES = {
@@ -30,25 +31,50 @@ const CONF_DOT = {
 };
 
 export default function SignalCard({ signal }: { signal: ParsedSignal }) {
+  const [expanded, setExpanded] = useState(false);
   const tierStyle = TIER_STYLES[signal.tier];
   const badgeStyle = TIER_BADGE[signal.tier];
   const confDot = CONF_DOT[signal.confidenceLabel] ?? 'bg-slate-500';
+  const hasMore = signal.description && signal.description.length > 120;
 
   return (
-    <div className={`rounded-lg border p-4 flex flex-col gap-2 ${tierStyle}`}>
-      <div className="flex items-center justify-between gap-2">
+    <div className={`rounded-lg border w-full ${tierStyle}`}>
+      {/* Fixed header row */}
+      <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-2">
         <span className={`text-[10px] font-bold tracking-widest px-2 py-0.5 rounded ${badgeStyle}`}>
           {TIER_LABEL[signal.tier]}
         </span>
-        <span className="flex items-center gap-1.5 text-xs text-slate-400">
+        <span className="flex items-center gap-1.5 text-xs text-slate-400 shrink-0">
           <span className={`w-2 h-2 rounded-full ${confDot}`} />
           {Math.round(signal.confidence * 100)}% {signal.confidenceLabel}
         </span>
       </div>
-      <p className="text-sm font-semibold text-white leading-snug">{signal.title}</p>
+
+      {/* Title — always visible */}
+      <p className="px-4 text-sm font-semibold text-white leading-snug">
+        {signal.title}
+      </p>
+
+      {/* Description */}
       {signal.description && (
-        <p className="text-xs text-slate-400 leading-relaxed line-clamp-3">{signal.description}</p>
+        <div className="px-4 pt-2">
+          <p className={`text-xs text-slate-400 leading-relaxed ${expanded ? '' : 'line-clamp-3'}`}>
+            {signal.description}
+          </p>
+        </div>
       )}
+
+      {/* Expand/collapse footer */}
+      <div className="px-4 pb-3 pt-2 flex justify-end">
+        {hasMore && (
+          <button
+            onClick={() => setExpanded(v => !v)}
+            className="text-[10px] font-semibold tracking-wider text-slate-500 hover:text-slate-300 transition-colors uppercase"
+          >
+            {expanded ? '▲ Less' : '▼ More'}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

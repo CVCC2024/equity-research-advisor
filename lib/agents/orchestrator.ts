@@ -2,6 +2,7 @@ import { runFundamentalsMaker } from './maker-fundamentals';
 import { runMacroMaker } from './maker-macro';
 import { runIndustryMaker } from './maker-industry';
 import { runRegulatoryMaker } from './maker-regulatory';
+import { fetchMarketContext, formatContextForPrompt } from '@/lib/data/massive';
 import { runChecker } from './checker';
 import { runCorrelation } from './correlation';
 import { runSynthesis } from './synthesis';
@@ -186,12 +187,16 @@ export async function runResearchPipeline(
   }));
   const sessionId = session.session_id;
 
-  // Step 1: Run 4 Makers in parallel
+  // Fetch live market data before makers run
+  const marketCtx = await fetchMarketContext(symbol).catch(() => null);
+  const liveContext = marketCtx ? formatContextForPrompt(marketCtx) : undefined;
+
+  // Step 1: Run 4 Makers in parallel (with live market context grounding)
   const [fundResult, macroResult, industryResult, regulatoryResult] = await Promise.allSettled([
-    runFundamentalsMaker(symbol, tickerRecord.company_name ?? undefined),
-    runMacroMaker(symbol, tickerRecord.company_name ?? undefined),
-    runIndustryMaker(symbol, tickerRecord.company_name ?? undefined),
-    runRegulatoryMaker(symbol, tickerRecord.company_name ?? undefined),
+    runFundamentalsMaker(symbol, tickerRecord.company_name ?? undefined, liveContext),
+    runMacroMaker(symbol, tickerRecord.company_name ?? undefined, liveContext),
+    runIndustryMaker(symbol, tickerRecord.company_name ?? undefined, liveContext),
+    runRegulatoryMaker(symbol, tickerRecord.company_name ?? undefined, liveContext),
   ]);
 
   let fundamentals: MakerFundamentalsOutput | null = null;
